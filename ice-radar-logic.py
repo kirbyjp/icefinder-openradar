@@ -30,10 +30,14 @@ class IceRadarDefragmenter:
         # Total altitude of the target slice
         return aircraft_alt_ft + height_delta_ft
 
-    def process_radar_return(self, raw_dbz, target_altitude_ft):
+    def process_radar_return(self, raw_dbz, target_altitude_ft, user_bias=1.0):
         """
         Processes raw reflectivity. If the beam is slicing above the freezing level,
-        it stretches weak signals and flags them for interleaved display rendering.
+        it stretches weak signals based on a base multiplier combined with a user-adjustable bias.
+        
+        user_bias: Float value (e.g., 0.5 to 2.0). 
+                   Values below 1.0 attenuate/dim down the ice overlay (clean up noise).
+                   Values above 1.0 amplify/increase sensitivity to capture micro-returns.
         """
         # If the signal is pure static/noise floor, leave it clean to prevent ghosting
         if raw_dbz < self.DBZ_NOISE_FLOOR:
@@ -44,14 +48,17 @@ class IceRadarDefragmenter:
             
             # If it looks like harmless light rain aloft, it is likely massive dry ice
             if raw_dbz <= self.DBZ_LIGHT_RAIN:
-                # Apply visual stretching: boost the signal internally
-                amplified_dbz = raw_dbz * self.ICE_REFLECTIVITY_FACTOR
+                
+                # Dynamic visual stretching factoring in the pilot's sensitivity bias knob
+                effective_multiplier = self.ICE_REFLECTIVITY_FACTOR * user_bias
+                amplified_dbz = raw_dbz * effective_multiplier
                 
                 # Flag the UI to use the interleaved/checkered paint mode
                 return {
                     "mode": "INTERLEAVED_ICE_WARNING",
                     "original_dbz": raw_dbz,
                     "amplified_dbz": amplified_dbz,
+                    "applied_multiplier": effective_multiplier,
                     "render_style": "CHECKERED_CYAN_GREEN"
                 }
                 
